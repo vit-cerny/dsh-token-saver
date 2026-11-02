@@ -1,0 +1,43 @@
+# ===========================================================================
+# TOKEN POLICY (dsh-token-saver) - host-plane rows for non-preset profiles.
+# These bundles mount the tools directly on the host plane, so a plain
+# `- id:` row applies (unlike the `web` profile, where they live in the
+# `preset-standard` preset). See https://github.com/vit-cerny/dsh-token-saver
+# ===========================================================================
+
+# Spawning tools removed: an agent cannot start unrequested subagents or
+# workflows. Prompt text is advice; an absent tool is enforcement.
+- id: tool-subagent
+  disabled: true
+
+- id: tool-subagent-fork
+  disabled: true
+
+- id: tool-workflow
+  disabled: true
+
+# Caps that survive as limits even when delegation is intentional.
+- id: subagent
+  config:
+    maxDepth: 1
+    maxActiveSubagents: 3
+
+- id: spill-policy
+  config:
+    maxInlineTokens: 6000
+
+- id: repeat-tool-reminder
+  config:
+    thresholds: [3, 8]
+    argumentsPreviewChars: 200
+
+- id: session-title-llm
+  config:
+    targetWords: 5
+    targetCjkCharacters: 10
+    maxInputBytes: 2048
+    maxOutputTokens: 1024
+    timeoutMs: 30000
+
+- id: harness-dev-context
+  disabled: true
