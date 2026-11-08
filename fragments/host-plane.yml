@@ -41,3 +41,11 @@
 
 - id: harness-dev-context
   disabled: true
+# Native Agent Teams (dsh-experimental-agent-team-profile). Disabling the
+# subagent tools alone is NOT enough: this bundle mounts its own team tool and
+# service on the host plane, and a team member is a full agent stream.
+- id: tool-agent-team
+  disabled: true
+
+- id: agent-team
+  disabled: true
