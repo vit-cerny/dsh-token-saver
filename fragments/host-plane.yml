@@ -49,3 +49,13 @@
 
 - id: agent-team
   disabled: true
+# `workflow-ptc` carries provider: spawn and can start workflows that fan out
+# into agents. The control/list tools are the rest of the delegation surface.
+- id: workflow-ptc
+  disabled: true
+
+- id: tool-subagent-control
+  disabled: true
+
+- id: tool-subagent-list-agents
+  disabled: true
