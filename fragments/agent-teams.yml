@@ -1,0 +1,4 @@
+# DSH TOKEN POLICY: AgentTeams disabled by default
+# AgentTeams exposes a separate spawn service; disabling tool-subagent alone is insufficient.
+- id: agent-teams
+  disabled: true

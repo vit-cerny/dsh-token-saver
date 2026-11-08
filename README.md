@@ -24,9 +24,9 @@ The multiplier at the end is what hurts. Fan-out is quadratic-ish in practice:
 
 | # | Lever | Where | Effect |
 |---|---|---|---|
-| 1 | **Disable delegation tools** | `preset-standard` | `subagent`, `subagent_fork`, `workflow`, `workflow_ptc`, `subagent-control`, `list-agents` stop existing. Biggest single win. |
-| 2 | **Cap team fan-out** | host `agent-teams` | `maxMembers: 100 → 8`, `memberMaxDepth: 2 → 1` |
-| 3 | **Cap concurrent children** | host `subagent` | `maxActiveSubagents: 8 → 3` |
+| 1 | **Disable delegation entry points** | `preset-standard` + host `agent-teams` | Subagent/workflow tools and AgentTeams service are absent by default. |
+| 2 | **Cap team fan-out** | host `agent-teams` | `maxMembers: 100 → 8`, `memberMaxDepth: 2 → 1` as a backstop if explicitly re-enabled |
+| 3 | **Cap concurrent children** | host `subagent` | `maxActiveSubagents: 8 → 1` |
 | 4 | **Cap tool results** | host `spill-policy` | `maxInlineTokens: 12500 → 6000` |
 | 5 | **Cap preset tool output** | `preset-standard` | `tool-result-pruner`, `tool-fs`, `tool-fs-search`, `tool-web` |
 | 6 | **Shrink skill catalog** | `tool-skill` | `catalogDescriptionMaxLength: 500 → 160` |
@@ -36,7 +36,7 @@ The multiplier at the end is what hurts. Fan-out is quadratic-ish in practice:
 | 10 | **Policy gate in AGENTS.md** | `~/.dsh/AGENTS.md` | AgentTeams only on explicit request |
 
 Levers 1–9 are **configuration**, not advice. A `disabled: true` row is a tool
-that does not exist; a `maxActiveSubagents: 3` is a limit in code.
+that does not exist; `maxActiveSubagents: 1` is a hard service cap.
 
 ## Why the config is split across two planes
 
@@ -44,7 +44,7 @@ This is the part that trips everyone up, so it is stated plainly.
 
 `dsh-web-app/cordis.patch.yml` **disables the host copies** of the agent tools
 and `presets/standard.patch.yml` **re-mounts them inside the `preset-standard`
-row**:
+row**. AgentTeams is a separate host plugin and needs its own disable row:
 
 ```
 compaction-basic, tool-result-pruner, tool-fs, tool-fs-search,
@@ -84,51 +84,35 @@ rather than writing a broken file.
 git clone https://github.com/vit-cerny/dsh-token-saver
 cd dsh-token-saver
 
-# 1. Preview, then write the preset block
+# 1. Preview, then apply host policy and one-child caps to every profile
+#    AgentTeams is disabled where its plugin is installed.
+node bin/apply-all.mjs --dry-run
+node bin/apply-all.mjs
+
+# 2. Preview, then write the web preset block
 node bin/enforce-preset.mjs --dry-run
 node bin/enforce-preset.mjs
 
-# 2. Append the generated block to the profile patch
+# 3. Append the generated block to the web profile patch
 #    (appends ~120 lines; keep the .bak-preset backup)
 Get-Content "$env:USERPROFILE\.dsh\profiles\web\cordis.patch.yml.preset-block.yml" |
   Add-Content "$env:USERPROFILE\.dsh\profiles\web\cordis.patch.yml"
 
-# 3. Restart DSH Desktop
+# 4. Restart DSH Desktop
 ```
 
-The host-plane caps (`spill-policy`, `subagent`, `agent-teams`,
-`repeat-tool-reminder`, `session-title-llm`, `harness-dev-context`) are small and
-safe — add them directly:
-
-```yaml
-- id: spill-policy
-  config: { maxInlineTokens: 6000 }
-
-- id: repeat-tool-reminder
-  config: { thresholds: [3, 8], argumentsPreviewChars: 200 }
-
-- id: subagent
-  config: { maxDepth: 1, maxActiveSubagents: 3 }
-
-- id: session-title-llm
-  config:
-    targetWords: 5
-    targetCjkCharacters: 10
-    maxInputBytes: 2048
-    maxOutputTokens: 1024
-    timeoutMs: 30000
-
-- id: harness-dev-context
-  disabled: true
-```
+`apply-all.mjs` writes timestamped backups before changes. It applies host
+policy where needed, caps all profiles at one child, and disables AgentTeams
+where installed. Re-run it after regenerating a CLI profile from Desktop.
 
 ## Verify it worked
 
 After restarting, in a fresh session:
 
+- Run `node bin/verify-agent-teams.mjs`; it checks profile caps and the AgentTeams gate.
 - Ask the agent to spawn a subagent. It should report the tool does not exist.
-- `/agent-teams-start <goal>` should still work — team members are spawned
-  through the `subagents` **service**, not the disabled tools.
+- AgentTeams tools should be absent until you remove the generated disable row
+  from that profile and restart DSH.
 - `/tier status` still shows the autotier tiers.
 
 Roll back at any time:
@@ -137,6 +121,9 @@ Roll back at any time:
 Copy-Item "$env:USERPROFILE\.dsh\profiles\web\cordis.patch.yml.bak-preset" `
           "$env:USERPROFILE\.dsh\profiles\web\cordis.patch.yml" -Force
 ```
+
+`apply-all.mjs` keeps a timestamped `cordis.patch.yml.bak-tokensaver-*` backup
+for each profile it changes.
 
 ## Re-run after every DSH upgrade
 
@@ -161,14 +148,15 @@ node bin/enforce-preset.mjs --dry-run   # check row count matches
 
 ## Honest limitations
 
-- **Skills are not the problem.** Of 60 skill directories, 52 already carry
-  `disable-model-invocation: true`; only 8 reach the prompt (~605 tokens). The
-  753 KB of `SKILL.md` is disk I/O, not prompt cost — bodies load lazily.
-- **rtk / ponytail / headroom are not wired in.** `dsh-our-free-model`'s token
-  saver only compacts traffic on *its own* adapter routes; it never touches
-  `api7` traffic, and it is not installed in the `web` profile. `ponytail` is a
-  skill, injected only if a prompt level is set. `headroom` is a separate proxy
-  that nothing currently routes through.
+- **Skill bodies load lazily.** The catalog is capped at 160 characters per
+  description; keep broad skills user-invoked and load one matching skill only.
+- **RTK only filters supported shell commands when invoked.** It cannot compact
+  DSH's internal tool output automatically. Graphify's existing graph can be
+  queried directly without loading its full skill body.
+- **Headroom is not on the DSH route.** DSH already uses native pruning and
+  compaction; do not add another proxy unless a measured test justifies its RAM.
+- Ponytail's concise defaults belong in the small global policy; its full skill
+  body stays user-invoked instead of loading on every coding request.
 - **Token counts are estimates** at 4 chars/token, not a provider tokenizer.
 
 ## License

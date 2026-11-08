@@ -1,0 +1,6 @@
+# DSH TOKEN POLICY: subagent cap set to 1
+# Keep the service bounded even if a profile or plugin is explicitly re-enabled.
+- id: subagent
+  config:
+    maxDepth: 1
+    maxActiveSubagents: 1

@@ -30,6 +30,8 @@ const GENERATED_PROFILES = new Set(['dsh-cli', 'dsh-cli-acp'])
 
 /** Marker used to make the append idempotent. */
 const MARKER = '# TOKEN POLICY (dsh-token-saver)'
+const TEAM_MARKER = '# DSH TOKEN POLICY: AgentTeams disabled by default'
+const CAP_MARKER = '# DSH TOKEN POLICY: subagent cap set to 1'
 
 /** Plugin packages live inside the installed app bundle. */
 const APP_NODE_MODULES = join(
@@ -40,8 +42,8 @@ const APP_NODE_MODULES = join(
   'node_modules',
 )
 
-/** Profile ids this script touches; `web` is handled by enforce-preset.mjs. */
-const SKIP = new Set(['web', 'node_modules'])
+/** Only exclude the profile-local dependency directory from profile discovery. */
+const SKIP = new Set(['node_modules'])
 
 function home() {
   return process.env.DSH_HOME ?? join(process.env.USERPROFILE ?? process.env.HOME ?? '.', '.dsh')
@@ -90,11 +92,28 @@ function usesPresets(profile) {
   }
 }
 
+/** Whether this profile has the separate AgentTeams spawn service installed. */
+function hasAgentTeams(profile) {
+  return existsSync(join(home(), 'profiles', profile, 'node_modules', '@nanmicoder', 'dsh-agent-teams', 'package.json'))
+}
+
 async function main() {
   const dryRun = process.argv.includes('--dry-run')
   const fragmentPath = join(import.meta.dirname ?? '.', '..', 'fragments', 'host-plane.yml')
+  const teamFragmentPath = join(import.meta.dirname ?? '.', '..', 'fragments', 'agent-teams.yml')
+  const capFragmentPath = join(import.meta.dirname ?? '.', '..', 'fragments', 'subagent-cap.yml')
   if (!existsSync(fragmentPath)) {
     console.error(`fragment not found: ${fragmentPath}`)
+    process.exitCode = 1
+    return
+  }
+  if (!existsSync(teamFragmentPath)) {
+    console.error(`fragment not found: ${teamFragmentPath}`)
+    process.exitCode = 1
+    return
+  }
+  if (!existsSync(capFragmentPath)) {
+    console.error(`fragment not found: ${capFragmentPath}`)
     process.exitCode = 1
     return
   }
@@ -102,6 +121,8 @@ async function main() {
   // once here, and never write it back: a BOM prefixing an appended fragment is
   // enough to make every profile patch fail to parse.
   const fragment = readFileSync(fragmentPath, 'utf8').replace(/^\uFEFF/, '').trimEnd()
+  const teamFragment = readFileSync(teamFragmentPath, 'utf8').replace(/^\uFEFF/, '').trimEnd()
+  const capFragment = readFileSync(capFragmentPath, 'utf8').replace(/^\uFEFF/, '').trimEnd()
 
   // Refuse to write anything that does not parse, so a bad edit cannot leave a
   // profile that fails to boot.
@@ -114,8 +135,10 @@ async function main() {
     }
   }
   assertParses(fragment, 'fragment')
+  assertParses(teamFragment, 'AgentTeams fragment')
+  assertParses(capFragment, 'subagent cap fragment')
 
-  console.log(`fragment: ${fragmentPath}\n`)
+  console.log(`fragments: ${fragmentPath}, ${teamFragmentPath}, ${capFragmentPath}\n`)
   let changed = 0
 
   for (const profile of listProfiles()) {
@@ -129,28 +152,36 @@ async function main() {
 
     const text = readFileSync(patchPath, 'utf8')
 
-    if (text.includes(MARKER)) {
+    const hasHostPolicy = text.includes(MARKER)
+    const hasTeamPolicy = text.includes(TEAM_MARKER)
+    const hasCapPolicy = text.includes(CAP_MARKER)
+    const teamInstalled = hasAgentTeams(profile)
+    if (hasHostPolicy && hasCapPolicy && (hasTeamPolicy || !teamInstalled)) {
       console.log(`${label} already patched`)
       continue
     }
 
-    if (GENERATED_PROFILES.has(profile)) {
-      console.log(`${label} GENERATED from the desktop profile, skipped`)
-      console.log(`${''.padEnd(17)}add subagent/tool-subagent rows to the desktop patch,`)
-      console.log(`${''.padEnd(17)}then re-run dsh-cli/scripts/install-profile.mjs`)
-      continue
-    }
+    const generated = GENERATED_PROFILES.has(profile)
+    const presetProfile = usesPresets(profile)
+    const blocks = []
+    if (!hasHostPolicy && !generated && !presetProfile) blocks.push(fragment)
+    if (!hasCapPolicy) blocks.push(capFragment)
+    if (!hasTeamPolicy && teamInstalled) blocks.push(teamFragment)
 
-    if (usesPresets(profile)) {
-      console.log(`${label} uses web presets, host rows would be no-ops`)
-      console.log(`${''.padEnd(17)}run: node bin/enforce-preset.mjs --profile=${profile}`)
+    if (!hasHostPolicy && generated) {
+      console.log(`${label} GENERATED from desktop; host policy skipped (re-run dsh-cli/scripts/install-profile.mjs after desktop changes)`)
+    } else if (!hasHostPolicy && presetProfile) {
+      console.log(`${label} uses presets; host token rows are handled by enforce-preset.mjs`)
+    }
+    if (blocks.length === 0) {
+      console.log(`${label} no applicable rows, skipped`)
       continue
     }
 
     // `[]` is a complete empty sequence: appending `- id:` after it is invalid
-    // YAML. Replace it; for a real patch, keep the existing rows and append.
-    const base = isEmptyList(text) ? '' : text.trimEnd() + '\n'
-    const next = base === '' ? `${fragment}\n` : `${base}\n${fragment}\n`
+    // YAML. Replace it; for a real patch, keep existing rows and append.
+    const base = isEmptyList(text) ? '' : text.trimEnd()
+    const next = base === '' ? `${blocks.join('\n\n')}\n` : `${base}\n\n${blocks.join('\n\n')}\n`
     try {
       assertParses(next, profile)
     } catch (error) {
@@ -158,11 +189,15 @@ async function main() {
       continue
     }
 
-    console.log(`${label} append token block (${isEmptyList(text) ? 'empty patch' : 'existing patch'})`)
+    const labels = blocks.map((block) => block.includes(TEAM_MARKER)
+      ? 'AgentTeams gate'
+      : block.includes(CAP_MARKER) ? 'subagent cap' : 'host token policy')
+    console.log(`${label} append ${labels.join(' + ')} (${isEmptyList(text) ? 'empty patch' : 'existing patch'})`)
     changed += 1
 
     if (dryRun) continue
-    copyFileSync(patchPath, `${patchPath}.bak-tokensaver`)
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+    copyFileSync(patchPath, `${patchPath}.bak-tokensaver-${stamp}`)
     writeFileSync(patchPath, next, 'utf8')
   }
 

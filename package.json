@@ -33,6 +33,7 @@
             },
     "scripts":  {
                     "preset:dry":  "node bin/enforce-preset.mjs --dry-run",
-                    "preset":  "node bin/enforce-preset.mjs"
+                    "preset":  "node bin/enforce-preset.mjs",
+                    "verify:agent-teams":  "node bin/verify-agent-teams.mjs"
                 }
 }

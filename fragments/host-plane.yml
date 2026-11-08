@@ -16,11 +16,11 @@
 - id: tool-workflow
   disabled: true
 
-# Caps that survive as limits even when delegation is intentional.
+# Backstop caps for profiles that enable delegation explicitly.
 - id: subagent
   config:
     maxDepth: 1
-    maxActiveSubagents: 3
+    maxActiveSubagents: 1
 
 - id: spill-policy
   config:
