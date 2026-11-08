@@ -29,11 +29,13 @@
                        "url":  "git+https://github.com/vit-cerny/dsh-token-saver.git"
                    },
     "bin":  {
-                "dsh-token-saver":  "./bin/enforce-preset.mjs"
+                "dsh-token-saver":  "./bin/enforce-preset.mjs",
+                "dsh-token-saver-teams":  "./bin/teams.mjs"
             },
     "scripts":  {
                     "preset:dry":  "node bin/enforce-preset.mjs --dry-run",
                     "preset":  "node bin/enforce-preset.mjs",
-                    "verify:agent-teams":  "node bin/verify-agent-teams.mjs"
+                    "verify:agent-teams":  "node bin/verify-agent-teams.mjs",
+                    "teams:status":  "node bin/teams.mjs"
                 }
 }

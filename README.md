@@ -162,3 +162,40 @@ node bin/enforce-preset.mjs --dry-run   # check row count matches
 ## License
 
 MIT
+
+## Measured state (this machine, 2026-11-08)
+
+Verified with DSH's own loader (`dsh --profile web --dump-config`), not by reading the edits.
+
+| What | Value |
+|---|---|
+| Spawn tools (all 3 presets, all 9 profiles) | `tool-agent-team`, `agent-team`, `tool-subagent`, `tool-subagent-fork`, `tool-workflow`, `workflow-ptc` — **all disabled** |
+| `maxActiveSubagents` | 1 (hard floor if a plugin re-enables the service) |
+| `spill-policy.maxInlineTokens` | 6000 (was 12500) |
+| `tool-skill.catalogDescriptionMaxLength` | 160 (was 500) |
+| `tool-result-pruner.thresholdChars` | 4096 (was 8192) |
+| `agent-instructions.maxBytes` | 16384 (was 65536) |
+| `harness-dev-context` | disabled (~333 tok/request) |
+| Skill catalog | 6 user skills advertised (~328 tok), 52 hidden by `disable-model-invocation` |
+| `AGENTS.md` | ~4.4 KB (~1.1k tok), re-sent each turn |
+| Computer-use MCP | `toolPreset: lazy` — 1 management tool at startup, loads the rest only when a desktop task starts |
+| Token spend | Nov 1: **$48.42 / 858M cache tokens** → Nov 3–7: **$0.20–0.48** |
+
+## Turning teams back on (explicitly)
+
+Teams are off by default and stay off across restarts. When you actually want them:
+
+```powershell
+node bin/teams.mjs on      # removes the gate from tool-agent-team + agent-team
+# restart DSH
+node bin/teams.mjs off     # re-arm the gate
+node bin/teams.mjs         # show current state
+```
+
+`on` only removes the *gate*. Every cap stays in place (`maxMembers: 8`,
+`memberMaxDepth: 1`, `maxActiveSubagents: 1`), so even an enabled team cannot
+fan out into dozens of agents.
+
+The toggle is text-level on purpose: the patch contains `!!js` expressions that a
+YAML round-trip would turn into truthy strings, disabling the wrong rows. A
+round-trip test (`on` then `off`) restores the file byte-identically.
