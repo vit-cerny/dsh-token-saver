@@ -1,41 +1,45 @@
-﻿{
-    "name":  "dsh-token-saver",
-    "version":  "0.1.0",
-    "description":  "Cut the tokens DeepSeek Harness (DSH) spends on every request: smaller skill catalog, capped tool results, trimmed system prompt, cheaper compaction, and RTK-style tool-output compaction. One command, idempotent, reversible.",
-    "type":  "module",
-    "private":  false,
-    "license":  "MIT",
-    "files":  [
-                  "bin/",
-                  "src/",
-                  "README.md"
-              ],
-    "engines":  {
-                    "node":  "\u003e=22.19.0"
-                },
-    "keywords":  [
-                     "dsh",
-                     "deepseek-harness",
-                     "tokens",
-                     "llm",
-                     "context",
-                     "compaction",
-                     "rtk",
-                     "headroom",
-                     "skills"
-                 ],
-    "repository":  {
-                       "type":  "git",
-                       "url":  "git+https://github.com/vit-cerny/dsh-token-saver.git"
-                   },
-    "bin":  {
-                "dsh-token-saver":  "./bin/enforce-preset.mjs",
-                "dsh-token-saver-teams":  "./bin/teams.mjs"
-            },
-    "scripts":  {
-                    "preset:dry":  "node bin/enforce-preset.mjs --dry-run",
-                    "preset":  "node bin/enforce-preset.mjs",
-                    "verify:agent-teams":  "node bin/verify-agent-teams.mjs",
-                    "teams:status":  "node bin/teams.mjs"
-                }
+{
+  "name": "dsh-token-saver",
+  "version": "0.1.0",
+  "description": "Cut the tokens DeepSeek Harness (DSH) spends on every request: smaller skill catalog, capped tool results, trimmed system prompt, cheaper compaction, and RTK-style tool-output compaction. One command, idempotent, reversible.",
+  "type": "module",
+  "private": false,
+  "license": "MIT",
+  "files": [
+    "bin/",
+    "src/",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "tokens",
+    "llm",
+    "context",
+    "compaction",
+    "rtk",
+    "headroom",
+    "skills"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vit-cerny/dsh-token-saver.git"
+  },
+  "bin": {
+    "dsh-token-saver": "./bin/tokensaver.mjs",
+    "dsh-token-saver-teams": "./bin/teams.mjs"
+  },
+  "scripts": {
+    "preset:dry": "node bin/enforce-preset.mjs --dry-run",
+    "preset": "node bin/enforce-preset.mjs",
+    "verify:agent-teams": "node bin/verify-agent-teams.mjs",
+    "teams:status": "node bin/teams.mjs",
+    "on": "node bin/tokensaver.mjs on",
+    "off": "node bin/tokensaver.mjs off",
+    "status": "node bin/tokensaver.mjs status",
+    "verify": "node bin/verify.mjs"
+  }
 }

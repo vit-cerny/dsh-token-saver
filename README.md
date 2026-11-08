@@ -80,30 +80,58 @@ rather than writing a broken file.
 
 ## Install
 
+One command on Windows (PowerShell 5.1+). Nothing is installed globally, no
+credentials are read or written, and every profile patch keeps a `.bak` copy:
+
 ```powershell
 git clone https://github.com/vit-cerny/dsh-token-saver
 cd dsh-token-saver
-
-# 1. Preview, then apply host policy and one-child caps to every profile
-#    AgentTeams is disabled where its plugin is installed.
-node bin/apply-all.mjs --dry-run
-node bin/apply-all.mjs
-
-# 2. Preview, then write the web preset block
-node bin/enforce-preset.mjs --dry-run
-node bin/enforce-preset.mjs
-
-# 3. Append the generated block to the web profile patch
-#    (appends ~120 lines; keep the .bak-preset backup)
-Get-Content "$env:USERPROFILE\.dsh\profiles\web\cordis.patch.yml.preset-block.yml" |
-  Add-Content "$env:USERPROFILE\.dsh\profiles\web\cordis.patch.yml"
-
-# 4. Restart DSH Desktop
+powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1
 ```
 
-`apply-all.mjs` writes timestamped backups before changes. It applies host
-policy where needed, caps all profiles at one child, and disables AgentTeams
-where installed. Re-run it after regenerating a CLI profile from Desktop.
+Then restart DSH Desktop.
+
+### Without the wrapper
+
+The installer only orchestrates these steps, which you can run yourself:
+
+```powershell
+node bin/apply-all.mjs --dry-run      # host policy + one-child caps, all profiles
+node bin/apply-all.mjs
+
+node bin/enforce-preset.mjs --dry-run # generate the web preset block
+node bin/enforce-preset.mjs
+node bin/apply-preset.mjs             # install it (REPLACES the row, never appends)
+```
+
+`apply-preset.mjs` replaces the existing `preset-standard` entry and aborts if
+the result would duplicate a top-level id. Do **not** append the generated
+block by hand: two `preset-standard` rows are ambiguous.
+
+## Enable / disable
+
+Everything is reversible and idempotent.
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Status  # verify only
+powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1          # on (default)
+powershell -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Off     # back to DSH defaults
+```
+
+Equivalently:
+
+```powershell
+node bin/tokensaver.mjs on       # apply the policy (snapshots profiles first)
+node bin/tokensaver.mjs status   # run both verifiers
+node bin/tokensaver.mjs off      # restore snapshot, else undo the row flags
+node bin/tokensaver.mjs teams    # show the teams gate state
+```
+
+`off` restores the snapshot taken by `on` when one exists under
+`%USERPROFILE%\.dsh\.token-saver-backup`; otherwise it flips the individual
+rows back (savers disabled, desktop tools eager, delegation re-enabled).
+
+## Verify it worked
 
 ## Verify it worked
 

@@ -29,6 +29,12 @@ async function main() {
   ]
   let bad = 0
   for (const [name, ok] of checks) { if (!ok) bad++; console.log(`${ok ? 'OK  ' : 'FAIL'} ${name}`) }
+
+  // Duplicate top-level ids are not fatal (Cordis keeps the last row), but they mean an
+  // older hand-patch overlapped a generated one. Surface it instead of hiding it.
+  const ids = rows.map((r) => r?.id).filter(Boolean)
+  const dup = [...new Set(ids.filter((id) => ids.indexOf(id) !== ids.lastIndexOf(id)))]
+  if (dup.length) console.log(`WARN duplicate top-level ids: ${dup.join(', ')} (harmless, last row wins)`)
   console.log(`\nplugin rows: ${flat.length}`)
   console.log(bad === 0 ? 'RESULT: PASS' : `RESULT: FAIL (${bad})`)
   process.exit(bad ? 1 : 0)
