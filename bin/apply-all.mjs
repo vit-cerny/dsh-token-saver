@@ -168,6 +168,22 @@ async function main() {
     if (!hasCapPolicy) blocks.push(capFragment)
     if (!hasTeamPolicy && teamInstalled) blocks.push(teamFragment)
 
+    // A hand-written row with the same id means the marker is missing but the policy is
+    // already there. Appending again would create two rows with one id (Cordis keeps the
+    // last, so it "works" while silently discarding the earlier config). Skip instead.
+    const hasRow = (id) => new RegExp(`^- id:\\s*'?${id}'?\\s*$`, 'm').test(text)
+    const kept = []
+    for (const block of blocks) {
+      const id = (block.match(/^- id:\s*'?([A-Za-z0-9_.-]+)'?/m) || [])[1]
+      if (id && hasRow(id)) {
+        console.log(`${label} row '${id}' already present without marker — skipped to avoid a duplicate`)
+        continue
+      }
+      kept.push(block)
+    }
+    blocks.length = 0
+    blocks.push(...kept)
+
     if (!hasHostPolicy && generated) {
       console.log(`${label} GENERATED from desktop; host policy skipped (re-run dsh-cli/scripts/install-profile.mjs after desktop changes)`)
     } else if (!hasHostPolicy && presetProfile) {
